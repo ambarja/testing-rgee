@@ -1,9 +1,7 @@
-name: rgee + land4health (macOS)
+name: rgee + land4health (macOS, ADC SA)
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches: ["main"]
 
 permissions:
   contents: read
@@ -19,58 +17,70 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
+          # rgee desde CRAN + tu paquete desde GitHub (si lo usas en este repo)
           extra-packages: |
-            any::remotes
+            any::rgee
             harmonize-tools/land4health
           needs: none
 
-      # --- Credenciales Earth Engine (Service Account) ---
+      # --- CREDENCIALES EE (Service Account) ---
       - name: Write EE ADC and env
         env:
           GEE_SA_KEY_B64: ${{ secrets.GEE_SA_KEY_B64 }}
           GEE_PROJECT_ID: ${{ secrets.GEE_PROJECT_ID }}
         run: |
-          echo "$GEE_SA_KEY_B64" | base64 -d > $RUNNER_TEMP/ee-key.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/ee-key.json" >> $GITHUB_ENV
-          echo "GEE_PROJECT_ID=$GEE_PROJECT_ID" >> $GITHUB_ENV
-          test -s "$RUNNER_TEMP/ee-key.json" && echo "✅ key escrita" || (echo "❌ clave vacía" && exit 1)
-          [ -n "$GEE_PROJECT_ID" ] && echo "✅ GEE_PROJECT_ID ok" || (echo "❌ falta GEE_PROJECT_ID" && exit 1)
+          echo "$GEE_SA_KEY_B64" | base64 -d > "$RUNNER_TEMP/ee-key.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/ee-key.json" >> "$GITHUB_ENV"
+          echo "GEE_PROJECT_ID=$GEE_PROJECT_ID" >> "$GITHUB_ENV"
+          test -s "$RUNNER_TEMP/ee-key.json" || (echo "❌ clave vacía" && exit 1)
+          [ -n "$GEE_PROJECT_ID" ] || (echo "❌ falta GEE_PROJECT_ID" && exit 1)
 
-      # --- Cachea la miniconda que crea rgee (acelera runs siguientes) ---
-      - name: Cache r-miniconda
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/r-miniconda
-          key: r-miniconda-${{ runner.os }}-v1
-
-      # --- Usa tu instalador: l4h_install() (crea env de rgee con earthengine-api) ---
-      - name: land4health install (rgee deps)
+      # --- VALIDAR QUE ES SERVICE ACCOUNT (no OAuth) ---
+      - name: Validate credentials JSON
         run: |
-          Rscript -e 'library(land4health); land4health::l4h_install()'
+          python - <<'PY'
+          import json, os, sys
+          p = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+          d = json.load(open(p))
+          print("JSON type:", d.get("type"))
+          assert d.get("type") == "service_account", "❌ JSON no es Service Account (parece OAuth)."
+          for k in ("project_id","client_email","private_key"):
+              assert k in d, f"❌ Falta '{k}' en el JSON."
+          print("✅ Service Account JSON OK.")
+          PY
 
-      # --- Usar el venv creado por l4h_install() ---
+      # --- CREAR ENTORNO PYTHON CON TU INSTALADOR (fija ee-api 0.1.370) ---
+      - name: land4health install (rgee deps)
+        run: Rscript -e 'library(land4health); land4health::l4h_install()'
+
+      # --- APUNTAR RETICULATE AL VENV CREADO POR l4h_install() ---
       - name: Point reticulate to r-land4health venv
         run: |
-          echo "RETICULATE_PYTHON=$HOME/.virtualenvs/r-land4health/bin/python" >> $GITHUB_ENV
-          $HOME/.virtualenvs/r-land4health/bin/python -c "import ee, sys; print('ee:', ee.__version__, 'python:', sys.executable)"
+          echo "RETICULATE_PYTHON=$HOME/.virtualenvs/r-land4health/bin/python" >> "$GITHUB_ENV"
+          $HOME/.virtualenvs/r-land4health/bin/python - <<'PY'
+          import ee, sys
+          print("ee:", ee.__version__)
+          print("python:", sys.executable)
+          PY
 
-      - name: Initialize rgee (service account) and test
-        env:
-          GEE_SA_EMAIL: ${{ secrets.GEE_SA_EMAIL }}
+      # --- INICIALIZAR rgee CON auth_mode='appdefault' + PRUEBA ---
+      - name: Initialize rgee (appdefault) and test
         run: |
           Rscript - <<'RS'
           library(reticulate)
           use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
-      
+
           library(rgee)
+          cat("rgee version:", as.character(packageVersion("rgee")), "\n")
+          cat("ee_Initialize args:", paste(names(formals(rgee::ee_Initialize)), collapse=", "), "\n")
+
           ee_Initialize(
-            user             = Sys.getenv("GEE_SA_EMAIL"),
-            credentials      = Sys.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-            project          = Sys.getenv("GEE_PROJECT_ID"),
-            quiet            = TRUE
+            auth_mode = "appdefault",
+            project   = Sys.getenv("GEE_PROJECT_ID"),
+            quiet     = TRUE
           )
           print(ee_user_info(quiet = TRUE))
-      
+
           ic <- ee$ImageCollection("COPERNICUS/S2_SR_HARMONIZED")$
                   filterDate("2024-01-01","2024-01-02")
           cat("ImageCollection size:", ic$size()$getInfo(), "\n")
