@@ -48,6 +48,12 @@ jobs:
         run: |
           Rscript -e 'library(land4health); land4health::l4h_install()'
 
+      # --- Usar el venv creado por l4h_install() ---
+      - name: Point reticulate to r-land4health venv
+        run: |
+          echo "RETICULATE_PYTHON=$HOME/.virtualenvs/r-land4health/bin/python" >> $GITHUB_ENV
+          $HOME/.virtualenvs/r-land4health/bin/python -c "import ee, sys; print('ee:', ee.__version__, 'python:', sys.executable)"
+
       # --- Inicializa rgee (no interactivo) y smoke test ---
       - name: Initialize rgee (appdefault) and test
         run: |
