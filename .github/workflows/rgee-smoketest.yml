@@ -48,17 +48,6 @@ jobs:
         run: |
           Rscript -e 'library(land4health); land4health::l4h_install()'
 
-      # --- Apuntar reticulate al Python del env de rgee ---
-      - name: Point reticulate to rgee Python
-        run: |
-          echo "RETICULATE_PYTHON=$HOME/.local/share/r-miniconda/envs/rgee/bin/python" >> $GITHUB_ENV
-          $HOME/.local/share/r-miniconda/envs/rgee/bin/python -c "import ee,sys; print('ee version:', ee.__version__); print('python:', sys.executable)"
-
-      # (Opcional) Asegurar última versión de earthengine-api en ese env
-      - name: Ensure earthengine-api up-to-date
-        run: |
-          Rscript -e 'library(rgee); ee_install_upgrade()'
-
       # --- Inicializa rgee (no interactivo) y smoke test ---
       - name: Initialize rgee (appdefault) and test
         run: |
@@ -73,7 +62,7 @@ jobs:
             quiet     = TRUE
           )
           print(ee_user_info(quiet = TRUE))
-
+          
           ic <- ee$ImageCollection("COPERNICUS/S2_SR_HARMONIZED")$
                   filterDate("2024-01-01","2024-01-02")
           cat("ImageCollection size:", ic$size()$getInfo(), "\n")
