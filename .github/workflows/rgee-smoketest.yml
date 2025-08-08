@@ -64,9 +64,8 @@ jobs:
       
           library(rgee)
           ee_Initialize(
-            email            = Sys.getenv("GEE_SA_EMAIL"),
-            key_path         = Sys.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-            service_account  = TRUE,
+            user             = Sys.getenv("GEE_SA_EMAIL"),
+            credentials      = Sys.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
             project          = Sys.getenv("GEE_PROJECT_ID"),
             quiet            = TRUE
           )
