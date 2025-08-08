@@ -49,9 +49,14 @@ jobs:
       # --- Inicializa rgee (no interactivo) y smoke test ---
       - name: Initialize rgee (appdefault) and test
         run: |
-          Rscript -e 'library(rgee); \
-            ee_Initialize(auth_mode="appdefault", project=Sys.getenv("GEE_PROJECT_ID"), quiet=TRUE); \
-            print(ee_user_info(quiet=TRUE)); \
-            ic <- ee$ImageCollection("COPERNICUS/S2_SR")$filterDate("2024-01-01","2024-01-02"); \
-            cat("ImageCollection size:", ic$size()$getInfo(), "\n"); \
-            cat("✅ EE inicializado y responde.\n")'
+          Rscript - <<'RS'
+          library(rgee)
+          ee_Initialize(auth_mode = "appdefault",
+                        project    = Sys.getenv("GEE_PROJECT_ID"),
+                        quiet      = TRUE)
+          print(ee_user_info(quiet = TRUE))
+          ic <- ee$ImageCollection("COPERNICUS/S2_SR_HARMONIZED")$
+                  filterDate("2024-01-01","2024-01-02")
+          cat("ImageCollection size:", ic$size()$getInfo(), "\n")
+          cat("✅ EE inicializado y responde.\n")
+          RS
