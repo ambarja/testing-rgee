@@ -54,21 +54,24 @@ jobs:
           echo "RETICULATE_PYTHON=$HOME/.virtualenvs/r-land4health/bin/python" >> $GITHUB_ENV
           $HOME/.virtualenvs/r-land4health/bin/python -c "import ee, sys; print('ee:', ee.__version__, 'python:', sys.executable)"
 
-      # --- Inicializa rgee (no interactivo) y smoke test ---
-      - name: Initialize rgee (appdefault) and test
+      - name: Initialize rgee (service account) and test
+        env:
+          GEE_SA_EMAIL: ${{ secrets.GEE_SA_EMAIL }}
         run: |
           Rscript - <<'RS'
           library(reticulate)
           use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
-
+      
           library(rgee)
           ee_Initialize(
-            auth_mode = "appdefault",
-            project   = Sys.getenv("GEE_PROJECT_ID"),
-            quiet     = TRUE
+            email            = Sys.getenv("GEE_SA_EMAIL"),
+            key_path         = Sys.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+            service_account  = TRUE,
+            project          = Sys.getenv("GEE_PROJECT_ID"),
+            quiet            = TRUE
           )
           print(ee_user_info(quiet = TRUE))
-          
+      
           ic <- ee$ImageCollection("COPERNICUS/S2_SR_HARMONIZED")$
                   filterDate("2024-01-01","2024-01-02")
           cat("ImageCollection size:", ic$size()$getInfo(), "\n")
