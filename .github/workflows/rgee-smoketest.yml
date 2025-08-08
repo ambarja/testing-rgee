@@ -1,17 +1,31 @@
-name: rgee smoke test
+name: rgee + land4health (macOS)
+
 on:
   workflow_dispatch:
+  # opcional: ejecútalo en cada push a main
+  # push:
+  #   branches: ["main"]
+
+permissions:
+  contents: read
 
 jobs:
-  ee-init:
-    runs-on: ubuntu-latest
+  ee-macos:
+    runs-on: macos-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup R
-        uses: r-lib/actions/setup-r@v2
+      - uses: r-lib/actions/setup-r@v2
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            any::remotes
+            harmonize-tools/land4health
+          needs: none
 
-      - name: Write EE credentials and env
+      # --- Credenciales Earth Engine (Service Account) ---
+      - name: Write EE ADC and env
         env:
           GEE_SA_KEY_B64: ${{ secrets.GEE_SA_KEY_B64 }}
           GEE_PROJECT_ID: ${{ secrets.GEE_PROJECT_ID }}
@@ -20,16 +34,24 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/ee-key.json" >> $GITHUB_ENV
           echo "GEE_PROJECT_ID=$GEE_PROJECT_ID" >> $GITHUB_ENV
 
-      - name: Install rgee and python deps
-        run: |
-          Rscript -e 'install.packages("rgee")'
-          Rscript -e 'library(rgee); ee_install()'   # instala earthengine-api (conda) en el runner
+      # --- Cachea la miniconda que crea rgee (acelera runs siguientes) ---
+      - name: Cache r-miniconda
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/r-miniconda
+          key: r-miniconda-${{ runner.os }}-v1
 
-      - name: Initialize rgee (non-interactive) and test
+      # --- Usa tu instalador: l4h_install() ---
+      - name: land4health install (rgee deps)
+        run: |
+          Rscript -e 'library(land4health); land4health::l4h_install()'
+
+      # --- Inicializa rgee (no interactivo) y smoke test ---
+      - name: Initialize rgee (appdefault) and test
         run: |
           Rscript -e 'library(rgee); \
             ee_Initialize(auth_mode="appdefault", project=Sys.getenv("GEE_PROJECT_ID"), quiet=TRUE); \
             print(ee_user_info(quiet=TRUE)); \
             ic <- ee$ImageCollection("COPERNICUS/S2_SR")$filterDate("2024-01-01","2024-01-02"); \
             cat("ImageCollection size:", ic$size()$getInfo(), "\n"); \
-            cat("✅ Earth Engine inicializado y responde.\n")'
+            cat("✅ EE inicializado y responde.\n")'
