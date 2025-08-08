@@ -1,4 +1,4 @@
-name: rgee + land4health (macOS, SA)
+it'sname: rgee + land4health (macOS, SA)
 
 on:
   workflow_dispatch:
@@ -75,14 +75,13 @@ jobs:
           info <- jsonlite::fromJSON(key_path)
           sa_email <- info$client_email
           py_run_string(sprintf("
-import ee, os
-email = %r
-key   = os.environ['GOOGLE_APPLICATION_CREDENTIALS']
-proj  = os.environ.get('GEE_PROJECT_ID')
-cred  = ee.ServiceAccountCredentials(email, key)
-ee.Initialize(cred, project=proj)
-print('✅ EE Python inicializado con SA:', email)
-", sa_email))
+           import ee, os
+           email = %r
+           key   = os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+           proj  = os.environ.get('GEE_PROJECT_ID')
+           cred  = ee.ServiceAccountCredentials(email, key)
+           ee.Initialize(cred, project=proj)
+           print('✅ EE Python inicializado con SA:', email)", sa_email))
 
           # 2) Usar rgee normalmente (hereda el módulo ee ya inicializado)
           library(rgee)
