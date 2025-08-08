@@ -1,4 +1,4 @@
-name: rgee + land4health (macOS, ADC SA)
+name: rgee + land4health (macOS, SA)
 
 on:
   workflow_dispatch:
@@ -17,13 +17,13 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          # rgee desde CRAN + tu paquete desde GitHub (si lo usas en este repo)
           extra-packages: |
             any::rgee
+            any::jsonlite
             harmonize-tools/land4health
           needs: none
 
-      # --- CREDENCIALES EE (Service Account) ---
+      # --- CREDENCIALES (Service Account) ---
       - name: Write EE ADC and env
         env:
           GEE_SA_KEY_B64: ${{ secrets.GEE_SA_KEY_B64 }}
@@ -35,7 +35,7 @@ jobs:
           test -s "$RUNNER_TEMP/ee-key.json" || (echo "❌ clave vacía" && exit 1)
           [ -n "$GEE_PROJECT_ID" ] || (echo "❌ falta GEE_PROJECT_ID" && exit 1)
 
-      # --- VALIDAR QUE ES SERVICE ACCOUNT (no OAuth) ---
+      # --- Validar que el JSON es una Service Account real (no OAuth) ---
       - name: Validate credentials JSON
         run: |
           python - <<'PY'
@@ -49,11 +49,11 @@ jobs:
           print("✅ Service Account JSON OK.")
           PY
 
-      # --- CREAR ENTORNO PYTHON CON TU INSTALADOR (fija ee-api 0.1.370) ---
+      # --- Crear el venv e instalar earthengine-api (vía tu paquete) ---
       - name: land4health install (rgee deps)
         run: Rscript -e 'library(land4health); land4health::l4h_install()'
 
-      # --- APUNTAR RETICULATE AL VENV CREADO POR l4h_install() ---
+      # --- Apuntar reticulate al venv que crea l4h_install() ---
       - name: Point reticulate to r-land4health venv
         run: |
           echo "RETICULATE_PYTHON=$HOME/.virtualenvs/r-land4health/bin/python" >> "$GITHUB_ENV"
@@ -63,26 +63,33 @@ jobs:
           print("python:", sys.executable)
           PY
 
-      # --- INICIALIZAR rgee CON auth_mode='appdefault' + PRUEBA ---
-      - name: Initialize rgee (appdefault) and test
+      # --- Inicializar Earth Engine con Service Account (lado Python) y probar ---
+      - name: Initialize EE via Service Account (Python) and test
         run: |
           Rscript - <<'RS'
           library(reticulate)
           use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
 
-          library(rgee)
-          cat("rgee version:", as.character(packageVersion("rgee")), "\n")
-          cat("ee_Initialize args:", paste(names(formals(rgee::ee_Initialize)), collapse=", "), "\n")
+          # 1) Inicializa EE en Python con credenciales de SA (explícito, sin OAuth)
+          key_path <- Sys.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+          info <- jsonlite::fromJSON(key_path)
+          sa_email <- info$client_email
+          py_run_string(sprintf("
+import ee, os
+email = %r
+key   = os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+proj  = os.environ.get('GEE_PROJECT_ID')
+cred  = ee.ServiceAccountCredentials(email, key)
+ee.Initialize(cred, project=proj)
+print('✅ EE Python inicializado con SA:', email)
+", sa_email))
 
-          ee_Initialize(
-            auth_mode = "appdefault",
-            project   = Sys.getenv("GEE_PROJECT_ID"),
-            quiet     = TRUE
-          )
+          # 2) Usar rgee normalmente (hereda el módulo ee ya inicializado)
+          library(rgee)
           print(ee_user_info(quiet = TRUE))
 
-          ic <- ee$ImageCollection("COPERNICUS/S2_SR_HARMONIZED")$
-                  filterDate("2024-01-01","2024-01-02")
-          cat("ImageCollection size:", ic$size()$getInfo(), "\n")
-          cat("✅ EE inicializado y responde.\n")
+          ic <- ee$ImageCollection('COPERNICUS/S2_SR_HARMONIZED')$
+                  filterDate('2024-01-01','2024-01-02')
+          cat('ImageCollection size:', ic$size()$getInfo(), '\n')
+          cat('✅ Workflow OK.\n')
           RS
